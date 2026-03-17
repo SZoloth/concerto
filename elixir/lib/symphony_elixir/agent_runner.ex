@@ -149,9 +149,30 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
-  defp build_turn_prompt(issue, opts, 1, _max_turns), do: PromptBuilder.build_prompt(issue, opts)
+  defp build_turn_prompt(issue, opts, 1, _max_turns) do
+    if planning_model_configured?() and not spec_ready?(issue) do
+      PromptBuilder.build_planning_prompt(issue, opts)
+    else
+      if spec_ready?(issue), do: Logger.info("Skipping planning turn for #{issue_context(issue)} — spec-ready label detected")
+      PromptBuilder.build_prompt(issue, opts)
+    end
+  end
+
+  defp build_turn_prompt(issue, opts, 2, max_turns) do
+    if planning_model_configured?() and not spec_ready?(issue) do
+      full_prompt = PromptBuilder.build_prompt(issue, opts)
+      continuation = PromptBuilder.build_execution_continuation_prompt(2, max_turns)
+      full_prompt <> "\n\n" <> continuation
+    else
+      build_standard_continuation(2, max_turns)
+    end
+  end
 
   defp build_turn_prompt(_issue, _opts, turn_number, max_turns) do
+    build_standard_continuation(turn_number, max_turns)
+  end
+
+  defp build_standard_continuation(turn_number, max_turns) do
     """
     Continuation guidance:
 
@@ -228,4 +249,14 @@ defmodule SymphonyElixir.AgentRunner do
   defp issue_context(%Issue{id: issue_id, identifier: identifier}) do
     "issue_id=#{issue_id} issue_identifier=#{identifier}"
   end
+
+  defp planning_model_configured? do
+    is_binary(Config.settings!().claude.planning_model)
+  end
+
+  defp spec_ready?(%Issue{labels: labels}) when is_list(labels) do
+    Enum.any?(labels, &(&1 == "spec-ready"))
+  end
+
+  defp spec_ready?(_issue), do: false
 end

@@ -109,6 +109,11 @@ defmodule SymphonyElixir.TestSupport do
           max_concurrent_agents_by_state: %{},
           claude_command: "claude -p",
           claude_model: "sonnet",
+          claude_planning_model: nil,
+          claude_execution_model: nil,
+          claude_upgrade_model: nil,
+          claude_upgrade_labels: nil,
+          claude_upgrade_priorities: nil,
           claude_permission_mode: "bypassPermissions",
           claude_turn_timeout_ms: 3_600_000,
           claude_stall_timeout_ms: 300_000,
@@ -145,11 +150,7 @@ defmodule SymphonyElixir.TestSupport do
     max_turns = Keyword.get(config, :max_turns)
     max_retry_backoff_ms = Keyword.get(config, :max_retry_backoff_ms)
     max_concurrent_agents_by_state = Keyword.get(config, :max_concurrent_agents_by_state)
-    claude_command = Keyword.get(config, :claude_command)
-    claude_model = Keyword.get(config, :claude_model)
-    claude_permission_mode = Keyword.get(config, :claude_permission_mode)
-    claude_turn_timeout_ms = Keyword.get(config, :claude_turn_timeout_ms)
-    claude_stall_timeout_ms = Keyword.get(config, :claude_stall_timeout_ms)
+    # claude fields accessed via config keyword list in claude_yaml/1
     hook_after_create = Keyword.get(config, :hook_after_create)
     hook_before_run = Keyword.get(config, :hook_before_run)
     hook_after_run = Keyword.get(config, :hook_after_run)
@@ -186,12 +187,7 @@ defmodule SymphonyElixir.TestSupport do
         "  max_turns: #{yaml_value(max_turns)}",
         "  max_retry_backoff_ms: #{yaml_value(max_retry_backoff_ms)}",
         "  max_concurrent_agents_by_state: #{yaml_value(max_concurrent_agents_by_state)}",
-        "claude:",
-        "  command: #{yaml_value(claude_command)}",
-        "  model: #{yaml_value(claude_model)}",
-        "  permission_mode: #{yaml_value(claude_permission_mode)}",
-        "  turn_timeout_ms: #{yaml_value(claude_turn_timeout_ms)}",
-        "  stall_timeout_ms: #{yaml_value(claude_stall_timeout_ms)}",
+        claude_yaml(config),
         hooks_yaml(hook_after_create, hook_before_run, hook_after_run, hook_before_remove, hook_timeout_ms),
         observability_yaml(observability_enabled, observability_refresh_ms, observability_render_interval_ms),
         server_yaml(server_port, server_host),
@@ -293,6 +289,25 @@ defmodule SymphonyElixir.TestSupport do
       [] -> nil
       _ -> Enum.join(["filters:" | entries], "\n")
     end
+  end
+
+  defp claude_yaml(config) do
+    [
+      "claude:",
+      "  command: #{yaml_value(config[:claude_command])}",
+      "  model: #{yaml_value(config[:claude_model])}",
+      config[:claude_planning_model] && "  planning_model: #{yaml_value(config[:claude_planning_model])}",
+      config[:claude_execution_model] && "  execution_model: #{yaml_value(config[:claude_execution_model])}",
+      config[:claude_upgrade_model] && "  upgrade_model: #{yaml_value(config[:claude_upgrade_model])}",
+      config[:claude_upgrade_labels] && "  upgrade_labels: #{yaml_value(config[:claude_upgrade_labels])}",
+      config[:claude_upgrade_priorities] &&
+        "  upgrade_priorities: #{yaml_value(config[:claude_upgrade_priorities])}",
+      "  permission_mode: #{yaml_value(config[:claude_permission_mode])}",
+      "  turn_timeout_ms: #{yaml_value(config[:claude_turn_timeout_ms])}",
+      "  stall_timeout_ms: #{yaml_value(config[:claude_stall_timeout_ms])}"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
   end
 
   defp hook_entry(_name, nil), do: nil

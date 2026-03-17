@@ -68,7 +68,7 @@ defmodule SymphonyElixir.Claude.AppServer do
 
     with {:ok, prompt_path} <- write_prompt_file(prompt) do
       try do
-        with {:ok, command} <- build_command(session, turn_number),
+        with {:ok, command} <- build_command(session, turn_number, issue),
              {:ok, port} <- start_port(command, session.workspace, prompt_path, session.worker_host) do
           metadata = port_metadata(port, session.worker_host)
 
@@ -120,7 +120,7 @@ defmodule SymphonyElixir.Claude.AppServer do
 
   # -- Command building --
 
-  defp build_command(session, turn_number) do
+  defp build_command(session, turn_number, issue) do
     claude_config = Config.settings!().claude
     base = claude_config.command
 
@@ -130,7 +130,7 @@ defmodule SymphonyElixir.Claude.AppServer do
         "stream-json",
         "--verbose",
         "--model",
-        claude_config.model,
+        resolve_model(claude_config, issue, turn_number),
         "--session-id",
         session.session_id,
         "--permission-mode",
@@ -142,6 +142,64 @@ defmodule SymphonyElixir.Claude.AppServer do
 
     {:ok, Enum.join([base | flags], " ")}
   end
+
+  defp resolve_model(claude_config, issue, turn_number) do
+    {model, reason} =
+      cond do
+        turn_number == 1 and is_binary(claude_config.planning_model) ->
+          {claude_config.planning_model, "planning turn"}
+
+        turn_number > 1 and is_binary(claude_config.execution_model) ->
+          resolve_with_upgrades(claude_config, issue, claude_config.execution_model)
+
+        upgraded_by_label?(claude_config, issue) ->
+          {claude_config.upgrade_model, "label match"}
+
+        upgraded_by_priority?(claude_config, issue) ->
+          {claude_config.upgrade_model, "priority #{Map.get(issue, :priority)}"}
+
+        true ->
+          {claude_config.model, "default"}
+      end
+
+    if model != claude_config.model do
+      Logger.info("Model resolved to #{model} for #{Map.get(issue, :identifier, "unknown")} (#{reason})")
+    end
+
+    model
+  end
+
+  defp resolve_with_upgrades(claude_config, issue, base_model) do
+    cond do
+      upgraded_by_label?(claude_config, issue) ->
+        {claude_config.upgrade_model, "label match (execution)"}
+
+      upgraded_by_priority?(claude_config, issue) ->
+        {claude_config.upgrade_model, "priority #{Map.get(issue, :priority)} (execution)"}
+
+      true ->
+        {base_model, "execution turn"}
+    end
+  end
+
+  defp upgraded_by_label?(%{upgrade_labels: []}, _issue), do: false
+
+  defp upgraded_by_label?(%{upgrade_labels: upgrade_labels}, %{labels: labels})
+       when is_list(labels) do
+    normalized_upgrade = MapSet.new(upgrade_labels, &String.downcase/1)
+    Enum.any?(labels, &MapSet.member?(normalized_upgrade, String.downcase(&1)))
+  end
+
+  defp upgraded_by_label?(_config, _issue), do: false
+
+  defp upgraded_by_priority?(%{upgrade_priorities: []}, _issue), do: false
+
+  defp upgraded_by_priority?(%{upgrade_priorities: priorities}, %{priority: priority})
+       when is_integer(priority) do
+    priority in priorities
+  end
+
+  defp upgraded_by_priority?(_config, _issue), do: false
 
   defp maybe_add_continue(flags, turn_number) when turn_number > 1, do: flags ++ ["--continue"]
   defp maybe_add_continue(flags, _turn_number), do: flags
