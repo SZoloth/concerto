@@ -157,6 +157,11 @@ defmodule SymphonyElixir.Config.Schema do
     embedded_schema do
       field(:command, :string, default: "claude -p")
       field(:model, :string, default: "sonnet")
+      field(:planning_model, :string)
+      field(:execution_model, :string)
+      field(:upgrade_model, :string, default: "opus")
+      field(:upgrade_labels, {:array, :string}, default: [])
+      field(:upgrade_priorities, {:array, :integer}, default: [])
       field(:permission_mode, :string, default: "bypassPermissions")
       field(:turn_timeout_ms, :integer, default: 3_600_000)
       field(:stall_timeout_ms, :integer, default: 300_000)
@@ -167,7 +172,18 @@ defmodule SymphonyElixir.Config.Schema do
       schema
       |> cast(
         attrs,
-        [:command, :model, :permission_mode, :turn_timeout_ms, :stall_timeout_ms],
+        [
+          :command,
+          :model,
+          :planning_model,
+          :execution_model,
+          :upgrade_model,
+          :upgrade_labels,
+          :upgrade_priorities,
+          :permission_mode,
+          :turn_timeout_ms,
+          :stall_timeout_ms
+        ],
         empty_values: []
       )
       |> validate_required([:command])
