@@ -22,8 +22,8 @@ agent:
   max_concurrent_agents: 10
   max_turns: 20
 filters:
+  exclude_assignee: "me"
   # Optional. When set, only issues matching ALL configured filters are picked up.
-  # Omit the entire section (or any field) to process all issues (default behavior).
   #
   # labels: ["agent-ready"]       # only issues carrying at least one of these labels
   # states: ["Todo"]              # narrow pickup to a subset of tracker.active_states
